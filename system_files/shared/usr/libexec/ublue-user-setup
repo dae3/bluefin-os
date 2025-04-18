@@ -60,6 +60,11 @@ fi
 # Handle privileged tasks
 pkexec /usr/libexec/ublue-privileged-user-setup
 
+# Enable dynamic wallpaper service and timer
+echo "Enabling dynamic wallpaper service and timer"
+systemctl --user enable --now bluefin-dynamic-wallpaper.service
+systemctl --user enable --now bluefin-dynamic-wallpaper.timer
+
 # Prevent future executions
 echo "Writing state file"
 echo $USER_SETUP_VER > "$USER_SETUP_VER_FILE"
