@@ -6,12 +6,11 @@
 LOGGER_TAG="bluefin-dynamic-wallpaper"
 WALLPAPER_BASE_PATH="/usr/share/backgrounds/bluefin"
 
-# Check current wallpaper first to see if it's a custom one
+# Don't clobber custom wallpaper
 CURRENT_WALLPAPER=$(gsettings get org.gnome.desktop.background picture-uri)
 CURRENT_WALLPAPER=${CURRENT_WALLPAPER#\'file://}
 CURRENT_WALLPAPER=${CURRENT_WALLPAPER%\'}
 
-# If user has a personal wallpaper set, don't change it
 if [[ "$CURRENT_WALLPAPER" != ${WALLPAPER_BASE_PATH}/*-bluefin.xml ]]; then
     logger -t "$LOGGER_TAG" "User has a personal wallpaper set. Not changing it."
     exit 0
@@ -26,7 +25,6 @@ MONTH_NUM=${MONTH#0}  # Remove leading zero if present
 GEOIP_DATA=$(curl -sfL https://ipapi.co/json/ 2>/dev/null)
 CURL_EXIT=$?
 
-# Check for curl failures
 if [[ ${CURL_EXIT} -ne 0 ]]; then
     logger -t "$LOGGER_TAG" "Failed to get geolocation data. curl exit code: ${CURL_EXIT}"
     exit 1
