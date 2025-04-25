@@ -4,6 +4,18 @@
 # This will be run at login and periodically to update the wallpaper
 
 LOGGER_TAG="bluefin-dynamic-wallpaper"
+WALLPAPER_BASE_PATH="/usr/share/backgrounds/bluefin"
+
+# Check current wallpaper first to see if it's a custom one
+CURRENT_WALLPAPER=$(gsettings get org.gnome.desktop.background picture-uri)
+CURRENT_WALLPAPER=${CURRENT_WALLPAPER#\'file://}
+CURRENT_WALLPAPER=${CURRENT_WALLPAPER%\'}
+
+# If user has a personal wallpaper set, don't change it
+if [[ "$CURRENT_WALLPAPER" != ${WALLPAPER_BASE_PATH}/*-bluefin.xml ]]; then
+    logger -t "$LOGGER_TAG" "User has a personal wallpaper set. Not changing it."
+    exit 0
+fi
 
 MONTH=$(date +%m)
 MONTH_NUM=${MONTH#0}  # Remove leading zero if present
@@ -14,43 +26,47 @@ MONTH_NUM=${MONTH#0}  # Remove leading zero if present
 GEOIP_DATA=$(curl -sfL https://ipapi.co/json/ 2>/dev/null)
 CURL_EXIT=$?
 
-if [[ ${CURL_EXIT} -eq 0 ]]; then
-    if [[ -n "$GEOIP_DATA" ]]; then
-        LATITUDE=$(echo "$GEOIP_DATA" | jq -r ".latitude")
-        if [[ $? -eq 0 ]] && [[ -n ${LATITUDE} ]]; then
-            # Successfully parsed latitude from response
-            if [[ -n "$LATITUDE" && $(echo "$LATITUDE < 0" | bc) -eq 1 ]]; then
-                HEMISPHERE="south"
-                # Add 6 months and wrap around if needed
-                MONTH_NUM=$(( (MONTH_NUM + 6 - 1) % 12 + 1 ))
-            else
-                HEMISPHERE="north"
-            fi
-
-            # Format month with leading zero if needed
-            if [[ $MONTH_NUM -lt 10 ]]; then
-                MONTH_PADDED="0$MONTH_NUM"
-            else
-                MONTH_PADDED="$MONTH_NUM"
-            fi
-
-            # Set the wallpaper
-            WALLPAPER_PATH="/usr/share/backgrounds/bluefin/${MONTH_PADDED}-bluefin.xml"
-
-            if [[ -f "$WALLPAPER_PATH" ]]; then
-                gsettings set org.gnome.desktop.background picture-uri "file://$WALLPAPER_PATH"
-                gsettings set org.gnome.desktop.background picture-uri-dark "file://$WALLPAPER_PATH"
-
-                logger -t "$LOGGER_TAG" "Set wallpaper to $WALLPAPER_PATH (adjusted month: $MONTH_NUM, hemisphere: $HEMISPHERE)"
-            else
-                logger -t "$LOGGER_TAG" "Wallpaper file not found: $WALLPAPER_PATH"
-            fi
-        else
-            logger -t "$LOGGER_TAG" "Failed to parse latitude from API response"
-        fi
-    else
-        logger -t "$LOGGER_TAG" "Empty geolocation data received"
-    fi
-else
+# Check for curl failures
+if [[ ${CURL_EXIT} -ne 0 ]]; then
     logger -t "$LOGGER_TAG" "Failed to get geolocation data. curl exit code: ${CURL_EXIT}"
+    exit 1
 fi
+
+if [[ -z "$GEOIP_DATA" ]]; then
+    logger -t "$LOGGER_TAG" "Empty geolocation data received"
+    exit 1
+fi
+
+LATITUDE=$(echo "$GEOIP_DATA" | jq -r ".latitude")
+if [[ $? -ne 0 ]] || [[ -z ${LATITUDE} ]]; then
+    logger -t "$LOGGER_TAG" "Failed to parse latitude from API response"
+    exit 1
+fi
+
+# Determine hemisphere and adjust month if needed
+if [[ -n "$LATITUDE" && $(echo "$LATITUDE < 0" | bc) -eq 1 ]]; then
+    HEMISPHERE="south"
+    # Add 6 months and wrap around if needed
+    MONTH_NUM=$(( (MONTH_NUM + 6 - 1) % 12 + 1 ))
+else
+    HEMISPHERE="north"
+fi
+
+# Format month with leading zero if needed
+if [[ $MONTH_NUM -lt 10 ]]; then
+    MONTH_PADDED="0$MONTH_NUM"
+else
+    MONTH_PADDED="$MONTH_NUM"
+fi
+
+WALLPAPER_PATH="${WALLPAPER_BASE_PATH}/${MONTH_PADDED}-bluefin.xml"
+
+if [[ ! -f "$WALLPAPER_PATH" ]]; then
+    logger -t "$LOGGER_TAG" "Wallpaper file not found: $WALLPAPER_PATH"
+    exit 1
+fi
+
+# Apply the wallpaper
+gsettings set org.gnome.desktop.background picture-uri "file://$WALLPAPER_PATH"
+gsettings set org.gnome.desktop.background picture-uri-dark "file://$WALLPAPER_PATH"
+logger -t "$LOGGER_TAG" "Set wallpaper to $WALLPAPER_PATH (adjusted month: $MONTH_NUM, hemisphere: $HEMISPHERE)"
