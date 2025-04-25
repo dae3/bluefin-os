@@ -14,6 +14,18 @@
 [group('System')]
 benchmark:
     #!/usr/bin/env bash
+    source /usr/lib/ujust/ujust.sh
+    if ! type -P "stress-ng" &>/dev/null ; then
+        if gum confirm "Stress does not seem to be on your path, do you wish to install it?" ; then
+            set -eu
+            brew install stress-ng
+            brew link stress-ng
+            set +eu
+        else
+            exit 0
+        fi
+    fi
+
     echo 'Running a 1 minute benchmark ...'
     trap popd EXIT
     pushd $(mktemp -d)
@@ -223,7 +235,7 @@ configure-vfio ACTION="":
 [group('System')]
 install-system-flatpaks:
     #!/usr/bin/bash
-    FLATPAKS="bluefin_flatpaks/flatpaks"
+    FLATPAKS="iso_files/system-flatpaks.txt"
     FLATPAK_LIST="$(curl https://raw.githubusercontent.com/ublue-os/bluefin/main/${FLATPAKS} | tr '\n' ' ')"
     flatpak --system -y install --or-update ${FLATPAK_LIST}
 
