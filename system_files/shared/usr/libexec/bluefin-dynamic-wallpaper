@@ -8,14 +8,9 @@ MONTH=$(date +%m)
 MONTH_NUM=${MONTH#0}  # Remove leading zero if present
 
 # Check if we're in the Southern hemisphere
-# This uses the GeoClue service if available, otherwise falls back to IP-based geolocation
-if command -v geoclue-where-am-i &> /dev/null; then
-    LATITUDE=$(geoclue-where-am-i | grep -oP 'Latitude: \K[-0-9.]+')
-elif command -v curl &> /dev/null; then
-    GEOIP_DATA=$(curl -s https://ipapi.co/json/ 2>/dev/null)
-    if [[ -n "$GEOIP_DATA" ]]; then
-        LATITUDE=$(echo "$GEOIP_DATA" | jq -r ".latitude")
-    fi
+GEOIP_DATA=$(curl -s https://ipapi.co/json/ 2>/dev/null)
+if [[ -n "$GEOIP_DATA" ]]; then
+    LATITUDE=$(echo "$GEOIP_DATA" | jq -r ".latitude")
 fi
 
 if [[ -n "$LATITUDE" && $(echo "$LATITUDE < 0" | bc) -eq 1 ]]; then
