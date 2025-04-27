@@ -19,35 +19,47 @@ fi
 MONTH=$(date +%m)
 MONTH_NUM=${MONTH#0}  # Remove leading zero if present
 
-# Check if we're in the Southern hemisphere
-# ipapi.co returns 302 to a landing page instead of 404, so we
-# test for successful parsing of the response rather than the HTTP status
-GEOIP_DATA=$(curl -sfL https://ipapi.co/json/ 2>/dev/null)
-CURL_EXIT=$?
+# Get latitude using Geoclue (D-Bus)
+get_latitude() {
+    # Start the Geoclue client
+    busctl --user call org.freedesktop.GeoClue2 /org/freedesktop/GeoClue2/Client org.freedesktop.GeoClue2.Client Start >/dev/null 2>&1
 
-if [[ ${CURL_EXIT} -ne 0 ]]; then
-    logger -t "$LOGGER_TAG" "Failed to get geolocation data. curl exit code: ${CURL_EXIT}"
-    exit 1
-fi
+    # Get the location object path
+    LOCATION_PATH=$(busctl --user get-property org.freedesktop.GeoClue2 /org/freedesktop/GeoClue2/Client org.freedesktop.GeoClue2.Client Location 2>/dev/null | awk '{print $2}' | tr -d '"')
 
-if [[ -z "$GEOIP_DATA" ]]; then
-    logger -t "$LOGGER_TAG" "Empty geolocation data received"
-    exit 1
-fi
+    if [[ -z "$LOCATION_PATH" ]]; then
+        logger -t "$LOGGER_TAG" "Failed to get location path from Geoclue"
+        return 1
+    fi
 
-LATITUDE=$(echo "$GEOIP_DATA" | jq -r ".latitude")
-if [[ $? -ne 0 ]] || [[ -z ${LATITUDE} ]]; then
-    logger -t "$LOGGER_TAG" "Failed to parse latitude from API response"
-    exit 1
-fi
+    # Extract latitude
+    LATITUDE=$(busctl --user get-property org.freedesktop.GeoClue2 "$LOCATION_PATH" org.freedesktop.GeoClue2.Location Latitude 2>/dev/null | awk '{print $2}')
 
-# Determine hemisphere and adjust month if needed
-if [[ -n "$LATITUDE" && $(echo "$LATITUDE < 0" | bc) -eq 1 ]]; then
-    HEMISPHERE="south"
-    # Add 6 months and wrap around if needed
-    MONTH_NUM=$(( (MONTH_NUM + 6 - 1) % 12 + 1 ))
-else
+    # Stop the Geoclue client to release resources
+    busctl --user call org.freedesktop.GeoClue2 /org/freedesktop/GeoClue2/Client org.freedesktop.GeoClue2.Client Stop >/dev/null 2>&1
+
+    if [[ -z "$LATITUDE" ]]; then
+        logger -t "$LOGGER_TAG" "Failed to get latitude from Geoclue"
+        return 1
+    fi
+
+    echo "$LATITUDE"
+    return 0
+}
+
+LATITUDE=$(get_latitude)
+if [[ $? -ne 0 ]]; then
+    logger -t "$LOGGER_TAG" "Falling back to Northern hemisphere (default)"
     HEMISPHERE="north"
+else
+    # Determine hemisphere
+    if (( $(echo "$LATITUDE < 0" | bc -l) )); then
+        HEMISPHERE="south"
+        # Add 6 months and wrap around if needed
+        MONTH_NUM=$(( (MONTH_NUM + 6 - 1) % 12 + 1 ))
+    else
+        HEMISPHERE="north"
+    fi
 fi
 
 # Format month with leading zero if needed
