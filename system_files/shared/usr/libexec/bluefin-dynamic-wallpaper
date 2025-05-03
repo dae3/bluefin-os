@@ -19,32 +19,54 @@ fi
 MONTH=$(date +%m)
 MONTH_NUM=${MONTH#0}  # Remove leading zero if present
 
-# Get latitude using Geoclue (D-Bus)
 get_latitude() {
-    # Start the Geoclue client
-    busctl --user call org.freedesktop.GeoClue2 /org/freedesktop/GeoClue2/Client org.freedesktop.GeoClue2.Client Start >/dev/null 2>&1
 
-    # Get the location object path
-    LOCATION_PATH=$(busctl --user get-property org.freedesktop.GeoClue2 /org/freedesktop/GeoClue2/Client org.freedesktop.GeoClue2.Client Location 2>/dev/null | awk '{print $2}' | tr -d '"')
+    client_path=$(gdbus call \
+        --system \
+        --dest org.freedesktop.GeoClue2 \
+        --object-path /org/freedesktop/GeoClue2/Manager \
+        --method org.freedesktop.GeoClue2.Manager.CreateClient | \
+        sed -n "s/^(\s*objectpath '\([^']*\)',\s*)$/\1/p")
 
-    if [[ -z "$LOCATION_PATH" ]]; then
-        logger -t "$LOGGER_TAG" "Failed to get location path from Geoclue"
-        return 1
-    fi
+    gdbus call --system \
+        --dest org.freedesktop.GeoClue2 \
+        --object-path "$client_path" \
+        --method org.freedesktop.DBus.Properties.Set \
+        org.freedesktop.GeoClue2.Client DesktopId "<'bluefin-dynamic-wallpaper'>"
 
-    # Extract latitude
-    LATITUDE=$(busctl --user get-property org.freedesktop.GeoClue2 "$LOCATION_PATH" org.freedesktop.GeoClue2.Location Latitude 2>/dev/null | awk '{print $2}')
+    gdbus call --system \
+        --dest org.freedesktop.GeoClue2 \
+        --object-path "$client_path" \
+        --method org.freedesktop.DBus.Properties.Set \
+        org.freedesktop.GeoClue2.Client RequestedAccuracyLevel "<u 4>"
 
-    # Stop the Geoclue client to release resources
-    busctl --user call org.freedesktop.GeoClue2 /org/freedesktop/GeoClue2/Client org.freedesktop.GeoClue2.Client Stop >/dev/null 2>&1
+    gdbus call --system \
+        --dest org.freedesktop.GeoClue2 \
+        --object-path "$client_path" \
+        --method org.freedesktop.DBus.Properties.Set \
+        org.freedesktop.GeoClue2.Client Active "<true>"
 
-    if [[ -z "$LATITUDE" ]]; then
-        logger -t "$LOGGER_TAG" "Failed to get latitude from Geoclue"
-        return 1
-    fi
+    # Wait briefly for location to be acquired
+    sleep 3
 
-    echo "$LATITUDE"
-    return 0
+    location_path=$(gdbus call \
+        --system \
+        --dest org.freedesktop.GeoClue2 \
+        --object-path "$client_path" \
+        --method org.freedesktop.DBus.Properties.Get \
+        org.freedesktop.GeoClue2.Client Location | \
+        sed -n "s/^(\s*objectpath '\([^']*\)')$/\1/p")
+
+    latitude=$(gdbus call \
+        --system \
+        --dest org.freedesktop.GeoClue2 \
+        --object-path "$location_path" \
+        --method org.freedesktop.DBus.Properties.Get \
+        org.freedesktop.GeoClue2.Location Latitude | \
+        sed -n "s/^(\s*double \([0-9.]*\))$/\1/p")
+
+    echo "$latitude"
+
 }
 
 LATITUDE=$(get_latitude)
