@@ -7,15 +7,19 @@ from pydbus import SystemBus
 try:
     bus = SystemBus()
 
-    manager = bus.get("org.freedesktop.GeoClue2", "/org/freedesktop/GeoClue2/Manager")
-
-    client_path = manager.CreateClient()
-    client = bus.get("org.freedesktop.GeoClue2", client_path)
-    # doco suggests DesktopId will be matched against
-    #  polkit rules but in practice the value seems arbitrary
-    client.DesktopId = "bluefin-dynamic-wallpaper"
-    client.RequestedAccuracyLevel = 1
-    client.Start()
+    try:
+        manager = bus.get("org.freedesktop.GeoClue2", "/org/freedesktop/GeoClue2/Manager")
+        client_path = manager.CreateClient()
+        client = bus.get("org.freedesktop.GeoClue2", client_path)
+        # doco suggests DesktopId will be matched against
+        #  polkit rules but in practice the value seems arbitrary
+        client.DesktopId = "bluefin-dynamic-wallpaper"
+        client.RequestedAccuracyLevel = 1
+        client.Start()
+    except Exception as e:
+        if "org.freedesktop.DBus.Error.AccessDenied" in str(e):
+            print("Location services disabled or denied")
+            exit(2)
 
     # Wait for location
     for _ in range(60):

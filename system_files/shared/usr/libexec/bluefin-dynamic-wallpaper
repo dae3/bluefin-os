@@ -19,9 +19,13 @@ MONTH=$(date +%m)
 MONTH_NUM=${MONTH#0}  # Remove leading zero if present
 
 LATITUDE=$(/usr/libexec/get-geoclue-latitude.py)
-if [[ $? -ne 0 ]]; then
-    echo "Falling back to Northern hemisphere"
-    HEMISPHERE="north"
+LOCATION_EXIT=$?
+if [[ $LOCATION_EXIT -eq 2 ]]; then
+    echo "Location services disabled or denied, not touching wallpaper"
+    exit 0
+elif [[ $LOCATION_EXIT -ne 0 ]]; then
+    echo "Error getting location, not touching wallpaper"
+    exit 1
 else
     # Determine hemisphere
     if (( $(echo "$LATITUDE < 0" | bc -l) )); then
