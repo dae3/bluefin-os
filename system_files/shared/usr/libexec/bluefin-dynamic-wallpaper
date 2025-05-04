@@ -19,57 +19,8 @@ fi
 MONTH=$(date +%m)
 MONTH_NUM=${MONTH#0}  # Remove leading zero if present
 
-get_latitude() {
 
-    client_path=$(gdbus call \
-        --system \
-        --dest org.freedesktop.GeoClue2 \
-        --object-path /org/freedesktop/GeoClue2/Manager \
-        --method org.freedesktop.GeoClue2.Manager.CreateClient | \
-        sed -n "s/^(\s*objectpath '\([^']*\)',\s*)$/\1/p")
-
-    gdbus call --system \
-        --dest org.freedesktop.GeoClue2 \
-        --object-path "$client_path" \
-        --method org.freedesktop.DBus.Properties.Set \
-        org.freedesktop.GeoClue2.Client DesktopId "<'bluefin-dynamic-wallpaper'>"
-
-    gdbus call --system \
-        --dest org.freedesktop.GeoClue2 \
-        --object-path "$client_path" \
-        --method org.freedesktop.DBus.Properties.Set \
-        org.freedesktop.GeoClue2.Client RequestedAccuracyLevel "<u 4>"
-
-    gdbus call --system \
-        --dest org.freedesktop.GeoClue2 \
-        --object-path "$client_path" \
-        --method org.freedesktop.DBus.Properties.Set \
-        org.freedesktop.GeoClue2.Client Active "<true>"
-
-    # Wait briefly for location to be acquired
-    sleep 3
-
-    location_path=$(gdbus call \
-        --system \
-        --dest org.freedesktop.GeoClue2 \
-        --object-path "$client_path" \
-        --method org.freedesktop.DBus.Properties.Get \
-        org.freedesktop.GeoClue2.Client Location | \
-        sed -n "s/^(\s*objectpath '\([^']*\)')$/\1/p")
-
-    latitude=$(gdbus call \
-        --system \
-        --dest org.freedesktop.GeoClue2 \
-        --object-path "$location_path" \
-        --method org.freedesktop.DBus.Properties.Get \
-        org.freedesktop.GeoClue2.Location Latitude | \
-        sed -n "s/^(\s*double \([0-9.]*\))$/\1/p")
-
-    echo "$latitude"
-
-}
-
-LATITUDE=$(get_latitude)
+LATITUDE=$(/usr/libexec/get-geoclue-latitude.py)
 if [[ $? -ne 0 ]]; then
     logger -t "$LOGGER_TAG" "Falling back to Northern hemisphere (default)"
     HEMISPHERE="north"
