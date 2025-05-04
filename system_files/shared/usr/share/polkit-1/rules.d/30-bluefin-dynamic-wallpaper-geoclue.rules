@@ -1,8 +1,0 @@
-// Allow any local, active user to use GeoClue without prompt
-polkit.addRule(function(action, subject) {
-    if (action.id == "org.freedesktop.GeoClue2.Client"
-        && subject.active
-        && subject.local) {
-        return polkit.Result.YES;
-    }
-});
